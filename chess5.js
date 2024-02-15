@@ -14,7 +14,7 @@ const addAvailableMovesToBoard = (availableMoves, pawnMoves) => {
 
 const removeHighlights = () => document.querySelectorAll('.circle-backing').forEach(highlight => highlight.classList.remove('circle-backing'))
 
-class Chess4 {
+class Chess5 {
 
     constructor () {
         this.setBoard(this.generateDefaultLayout())
@@ -40,6 +40,7 @@ class Chess4 {
     checkingPieces = []
     enPassantMoves = new Map()
 
+    //create board class member based on a pattern
     setBoard (pattern) {
         const board = []
         for (let i = 0; i < this.rows; ++i) {
@@ -64,14 +65,15 @@ class Chess4 {
         }
 
         this.board = board
-        this.updatePieces(this.whitePieceRefs.concat(this.blackPieceRefs), 0, 0, true)
-        this.updatePieces()
+        /*this.updateMoves(this.whitePieceRefs.concat(this.blackPieceRefs), 0, 0, true)
         this.updateKingMoves(this.whiteKingRef)
-        this.updateKingMoves(this.blackKingRef)
+        this.updateKingMoves(this.blackKingRef)*/
+        this.updatePieces(0,0,true)
     }
     
     startingRows = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook']
 
+    //creates pattern for default chess position
     generateDefaultLayout () {
         const layout = {}
         for (let i = 0; i < this.rows; ++i) {
@@ -89,6 +91,32 @@ class Chess4 {
         return layout
     }
 
+    //impromptu add piece to the board
+    addPieceToBoard (piece) {
+        const pieceRefArr = piece.color === 'white' ? this.whitePieceRefs : this.blackPieceRefs
+
+        pieceRefArr.push(piece)
+        this.board[piece.x][piece.y] = piece
+
+        this.resetTrackers()
+        this.updatePieces(stringifyCoordinates(piece.x, piece.y))
+    }
+
+    //update pieces on board based on changing coordinates
+    updatePieces (oldCoordinates, newCoordinates, setup) {
+        this.updateKingMoves(this.blackKingRef)
+        this.updateMoves(this.whitePieceRefs, oldCoordinates, newCoordinates, setup)
+
+        this.updateKingMoves(this.whiteKingRef)
+        this.updateMoves(this.blackPieceRefs, oldCoordinates, newCoordinates, setup)
+
+        this.adjustPinnedPieceMoves();
+        this.adjustKingSquares()
+        if (this.inCheck) {
+            this.adjustForCheck()
+        }
+    }
+
     //TODO
     //add to github repo
     //click move instead of drag and drop
@@ -104,30 +132,30 @@ class Chess4 {
     //piece equality instead of using coordinates
     //notTurn instead of handling colors in update fns
     //don't hold file in pieces. Instead hold stringify coords version of coords
+    //have a "setup" mode. In setup mode, have proxy board which gets updated. On save, set real board to proxy board and delete proxy. On cancel, revert to real board
+    //in setup mode, can move pieces without restrictions
 
+    //update board after moving a piece
     movePiece (oldCoordinates, newCoordinates, pieceDOMRef) {
         const {x: oldX, y: oldY} = parseCoordinates(oldCoordinates)
         const piece = this.board[oldX][oldY]
 
         if (piece.color === this.turn && (piece.availableSquares.has(newCoordinates) || piece.pawnMoves?.has(newCoordinates))) {
-            
+            //put piece into DOM
             document.getElementById(newCoordinates).replaceChildren(pieceDOMRef)
+            //remove any highlights
             removeHighlights()
-
+            //if en passant move played, remove piece from DOM, ref array, and board member
             if (piece.enPassantMove === newCoordinates) {
-                const mutatedArr = piece.color === 'white' ? this.blackPieceRefs : this.whitePieceRefs
-                mutatedArr.splice(mutatedArr.indexOf(piece.enPassantPieceRef), 1)
-                document.getElementById(stringifyCoordinates(piece.enPassantPieceRef.x, piece.enPassantPieceRef.y)).replaceChildren()
-                this.board[piece.enPassantPieceRef.x][piece.enPassantPieceRef.y] = null
+                this.adjustEnPassant(piece)
             }
 
             const {x: newX, y: newY} = parseCoordinates(newCoordinates)
             piece.x = newX
             piece.y = newY
-            //when capturing a piece, remove from piece reference array
+            //if capturing a piece, remove captured piece from piece reference array
             if (this.board[newX][newY]) {
-                const mutatedArr = piece.color === 'white' ? this.blackPieceRefs : this.whitePieceRefs
-                mutatedArr.splice(mutatedArr.indexOf(this.board[newX][newY]), 1)
+                this.removeFromReferenceArray(this.board[newX][newY])
             }
 
             this.board[newX][newY] = piece
@@ -135,49 +163,14 @@ class Chess4 {
 
             this.resetTrackers()
 
+            //if move meets criteria, give en passant moves to pawns
             if (piece.type === 'pawn' && Math.abs(oldX - newX) === 2) {
-                const leftSquare = this.board[piece.x][piece.y - 1]
-                const rightSquare = this.board[piece.x][piece.y + 1]
-                console.log(leftSquare, rightSquare)
-                if (leftSquare?.type === 'pawn' && leftSquare.color !== piece.color) {
-                    console.log('trigger1')
-                    const direction = piece.color === this.facingColor ? 1 : -1
-                    leftSquare.updateNextCycle = true
-                    this.enPassantMoves.set(stringifyCoordinates(leftSquare.x, leftSquare.y), [stringifyCoordinates(piece.x + direction, piece.y), piece])
-                    console.log(this.enPassantMoves)
-                }
-                if (rightSquare?.type === 'pawn' && rightSquare.color !== piece.color) {
-                    console.log('trigger2')
-                    const direction = piece.color === this.facingColor ? 1 : -1
-                    rightSquare.updateNextCycle = true
-                    this.enPassantMoves.set(stringifyCoordinates(rightSquare.x, rightSquare.y), [stringifyCoordinates(piece.x + direction, piece.y), piece])
-                    console.log(this.enPassantMoves)
-                }
+                this.assignEnPassantMoves(piece)
             }
 
-            //update black king moves
-            this.updateKingMoves(this.blackKingRef)
+            //update the pieces which aren't the piece being moved
+            this.updatePieces(oldCoordinates, newCoordinates)
 
-            //update black pieces
-            this.updatePieces(this.whitePieceRefs, oldCoordinates, newCoordinates)
-
-            //update white king moves
-            this.updateKingMoves(this.whiteKingRef)
-
-            //update white pieces
-            this.updatePieces(this.blackPieceRefs, oldCoordinates, newCoordinates)
-
-            //if pinned piece, restrict moves
-            this.pinnedPieces.forEach(([pinnedPiece, validMoves]) => {
-                pinnedPiece.availableSquares = new Set(validMoves.filter(move => pinnedPiece.availableSquares.has(move)))
-                if (pinnedPiece.type === 'pawn') pinnedPiece.pawnMoves = new Set(validMoves.filter(move => pinnedPiece.pawnMoves.has(move)))
-            })
-
-            this.adjustKingSquares()
-
-            if (this.inCheck) {
-                this.adjustForCheck()
-            }
             this.turn = this.turn === 'white' ? 'black' : 'white'
             //this.notTurn = this.notTurn === 'white' ? 'black' : 'white' 
 
@@ -186,6 +179,44 @@ class Chess4 {
         }
     }
 
+    //remove moves from pinned pieces
+    adjustPinnedPieceMoves () {
+        this.pinnedPieces.forEach(([pinnedPiece, validMoves]) => {
+            pinnedPiece.availableSquares = new Set(validMoves.filter(move => pinnedPiece.availableSquares.has(move)))
+            if (pinnedPiece.type === 'pawn') pinnedPiece.pawnMoves = new Set(validMoves.filter(move => pinnedPiece.pawnMoves.has(move)))
+        })
+    }
+
+    //give pawns ability to en passant if applicable
+    assignEnPassantMoves (piece) {
+        const leftSquare = this.board[piece.x][piece.y - 1]
+        const rightSquare = this.board[piece.x][piece.y + 1]
+        if (leftSquare?.type === 'pawn' && leftSquare.color !== piece.color) {
+            const direction = piece.color === this.facingColor ? 1 : -1
+            leftSquare.updateNextCycle = true
+            this.enPassantMoves.set(stringifyCoordinates(leftSquare.x, leftSquare.y), [stringifyCoordinates(piece.x + direction, piece.y), piece])
+        }
+        if (rightSquare?.type === 'pawn' && rightSquare.color !== piece.color) {
+            const direction = piece.color === this.facingColor ? 1 : -1
+            rightSquare.updateNextCycle = true
+            this.enPassantMoves.set(stringifyCoordinates(rightSquare.x, rightSquare.y), [stringifyCoordinates(piece.x + direction, piece.y), piece])
+        }
+    }
+
+    //takes a piece reference and removes from reference array
+    removeFromReferenceArray (piece) {
+        const mutatedArr = piece.color === 'white' ? this.whitePieceRefs : this.blackPieceRefs
+        mutatedArr.splice(mutatedArr.indexOf(piece), 1)
+    }
+
+    //if a piece is taken by en passant, adjust class members and DOM accordingly
+    adjustEnPassant (piece) {
+        this.removeFromReferenceArray(piece.enPassantPieceRef)
+        document.getElementById(stringifyCoordinates(piece.enPassantPieceRef.x, piece.enPassantPieceRef.y)).replaceChildren()
+        this.board[piece.enPassantPieceRef.x][piece.enPassantPieceRef.y] = null
+    }
+
+    //adjust king moves of player's king whose turn it is
     adjustKingSquares () {
         const isWhiteTurn = this.turn === 'white'
         const thisTurnPieces = isWhiteTurn ? this.whitePieceRefs : this.blackPieceRefs
@@ -202,6 +233,7 @@ class Chess4 {
         thisTurnKing.availableSquares.forEach(square => oppositeKing.availableSquares.delete(square))
     }
 
+    //remove all unviable moves from pieces when player is in check
     adjustForCheck () {
         let numAvailableMoves = 0
         const inCheckPieces = this.turn === 'white' ? this.blackPieceRefs : this.whitePieceRefs;
@@ -220,7 +252,7 @@ class Chess4 {
         }
     }
 
-    updatePieces (pieceRefArr, oldCoords, newCoords, isSetup) {
+    updateMoves (pieceRefArr, oldCoords, newCoords, isSetup) {
         pieceRefArr.forEach(piece => {
             if (isSetup || piece.setHasCoords(oldCoords, newCoords)) {
                 piece.clearSets()
@@ -238,13 +270,6 @@ class Chess4 {
                 }
             }
         })
-    }
-
-
-    removeFromKingMoves (kingColor, coord) {
-        kingColor === 'white' ?
-            this.whiteKingRef.availableSquares.delete(coord) :
-            this.blackKingRef.availableSquares.delete(coord)
     }
 
     putInCheck (moves, pieceRef) {
@@ -407,7 +432,6 @@ class Chess4 {
 
         const enPassantMove = this.enPassantMoves.get(stringifyCoordinates(piece.x, piece.y))
         if (enPassantMove) {
-            console.log(this.enPassantMoves)
             piece.pawnMoves.add(enPassantMove[0])
             piece.enPassantMove = enPassantMove[0]
             piece.enPassantPieceRef = enPassantMove[1]
@@ -459,7 +483,8 @@ class Chess4 {
                 squareElement.id = stringifyCoordinates(rowIndex, squareIndex)
                 if (square) {
                     const pieceElement = document.createElement('img')
-                    pieceElement.src = `./pieces/${square.file}`
+                    //pieceElement.src = `./pieces/${square.file}`
+                    pieceElement.src = `./pieces/${square.color}_${square.type}.png`
                     pieceElement.className = 'board-piece'
                     pieceElement.onmousedown = (e) => {
                         e.target.ondragstart = () => false
@@ -527,7 +552,6 @@ class Piece {
     constructor (color, type, x, y) {
         this.color = color;
         this.type = type;
-        this.file = `${color}_${type}.png`
         this.x = x;
         this.y = y;
         this.availableSquares = new Set();

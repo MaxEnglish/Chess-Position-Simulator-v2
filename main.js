@@ -1,3 +1,3 @@
 window.addEventListener('DOMContentLoaded', () => {
-   new Chess4()
+   new Chess5()
 })

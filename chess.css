@@ -1,0 +1,30 @@
+#board {
+    display: flex;
+    flex-direction: column;
+    border: 3vw solid rgb(35, 42, 145);
+    border-radius: 1vw;
+    width: fit-content;
+}
+
+.board-row {
+    display: flex;
+    flex-direction: row;
+}
+
+.board-square {
+    height: 5vw;
+    width: 5vw;
+}
+
+.board-piece {
+    width: 5vw;
+    cursor: grab;
+}
+
+.circle-backing {
+    background: radial-gradient(ellipse at center, lightgray 0%, lightgray 65%, transparent 66%);
+}
+
+.circle-red-backing {
+    background: radial-gradient(ellipse at center, lightgray 0%, lightgray 63%, red 65%, transparent 66%);
+}

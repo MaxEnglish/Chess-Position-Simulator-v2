@@ -14,6 +14,8 @@ const addAvailableMovesToBoard = (availableMoves, pawnMoves) => {
 
 const removeHighlights = () => document.querySelectorAll('.circle-backing').forEach(highlight => highlight.classList.remove('circle-backing'))
 
+const promotionPieceTypes = ['queen', 'rook', 'knight', 'bishop']
+
 class Chess5 {
 
     constructor () {
@@ -102,7 +104,7 @@ class Chess5 {
         this.updatePieces(stringifyCoordinates(piece.x, piece.y))
     }
 
-    //update pieces on board based on changing coordinates
+    //update pieces on board based on changing coordinates. To update all pieces at once, set setup to true
     updatePieces (oldCoordinates, newCoordinates, setup) {
         this.updateKingMoves(this.blackKingRef)
         this.updateMoves(this.whitePieceRefs, oldCoordinates, newCoordinates, setup)
@@ -118,10 +120,9 @@ class Chess5 {
     }
 
     //TODO
-    //add to github repo
     //click move instead of drag and drop
-    //en passant
     //promotion
+    //castling
     //customize style
     //show captured pieces
     //show whose turn it is
@@ -138,10 +139,18 @@ class Chess5 {
     //update board after moving a piece
     movePiece (oldCoordinates, newCoordinates, pieceDOMRef) {
         const {x: oldX, y: oldY} = parseCoordinates(oldCoordinates)
+        const {x: newX, y: newY} = parseCoordinates(newCoordinates)
         const piece = this.board[oldX][oldY]
 
         if (piece.color === this.turn && (piece.availableSquares.has(newCoordinates) || piece.pawnMoves?.has(newCoordinates))) {
+            //check if promoting piece
+            if (piece.type === 'pawn' && (newX === 0 || newX === this.rows)) {
+                this.handlePromotion(oldCoordinates, newCoordinates, piece, pieceDOMRef)
+                return;
+            }
+        
             //put piece into DOM
+            pieceDOMRef.style.position = 'static'
             document.getElementById(newCoordinates).replaceChildren(pieceDOMRef)
             //remove any highlights
             removeHighlights()
@@ -149,10 +158,10 @@ class Chess5 {
             if (piece.enPassantMove === newCoordinates) {
                 this.adjustEnPassant(piece)
             }
-
-            const {x: newX, y: newY} = parseCoordinates(newCoordinates)
+            
             piece.x = newX
             piece.y = newY
+
             //if capturing a piece, remove captured piece from piece reference array
             if (this.board[newX][newY]) {
                 this.removeFromReferenceArray(this.board[newX][newY])
@@ -167,16 +176,21 @@ class Chess5 {
             if (piece.type === 'pawn' && Math.abs(oldX - newX) === 2) {
                 this.assignEnPassantMoves(piece)
             }
-
+ 
             //update the pieces which aren't the piece being moved
             this.updatePieces(oldCoordinates, newCoordinates)
 
-            this.turn = this.turn === 'white' ? 'black' : 'white'
+            this.passTurn()
             //this.notTurn = this.notTurn === 'white' ? 'black' : 'white' 
 
         } else {
+            pieceDOMRef.style.position = 'static'
             document.getElementById(oldCoordinates).append(pieceDOMRef)
         }
+    }
+
+    passTurn () {
+        this.turn = this.turn === 'white' ? 'black' : 'white'
     }
 
     //remove moves from pinned pieces
@@ -252,9 +266,11 @@ class Chess5 {
         }
     }
 
+    //check if piece needs to be updated and calls proper method
     updateMoves (pieceRefArr, oldCoords, newCoords, isSetup) {
         pieceRefArr.forEach(piece => {
             if (isSetup || piece.setHasCoords(oldCoords, newCoords)) {
+                console.log(piece)
                 piece.clearSets()
                 switch(piece.type) {
                     case 'bishop':
@@ -272,6 +288,7 @@ class Chess5 {
         })
     }
 
+    //update the check members
     putInCheck (moves, pieceRef) {
         if (this.checkBlockMoves.length > 0) {
             this.checkBlockMoves = []
@@ -282,6 +299,7 @@ class Chess5 {
         if (pieceRef) this.checkingPieces.push(pieceRef)
     }
 
+    //reset fields
     resetTrackers () {
         this.pinnedPieces = []
         this.checkBlockMoves = []
@@ -290,6 +308,7 @@ class Chess5 {
         this.inCheck = false
     }
 
+    //update bishop/rook/queen moves
     updateIterativeMoves (piece) {
         const oppositeColor = piece.color === 'white' ? 'black' : 'white'
         let pieceToCauseXray, trackMoves = []
@@ -358,6 +377,7 @@ class Chess5 {
         }
     }
 
+    //update knight moves
     updateKnightMoves (piece) {
         const oppositeColor = piece.color === 'white' ? 'black' : 'white'
 
@@ -394,6 +414,7 @@ class Chess5 {
         findKnightMoves(down1, left2)
     }
 
+    //update pawn moves
     updatePawnMoves (piece) {
         const directionIsUp = piece.color === this.facingColor
         const oppositeColor = piece.color === 'white' ? 'black' : 'white'
@@ -439,6 +460,7 @@ class Chess5 {
         }
     }
 
+    //update king moves
     updateKingMoves (piece) {
         piece.clearSets()
         const down = piece.x + 1, 
@@ -468,8 +490,9 @@ class Chess5 {
     }
 
 
-    //DOM MANIP
+    //DOM MANIP//
 
+    //creates board on DOM using board member
     DOMCreateBoard () {
         const boardElement = document.createElement('div')
         boardElement.id = 'board'
@@ -483,7 +506,6 @@ class Chess5 {
                 squareElement.id = stringifyCoordinates(rowIndex, squareIndex)
                 if (square) {
                     const pieceElement = document.createElement('img')
-                    //pieceElement.src = `./pieces/${square.file}`
                     pieceElement.src = `./pieces/${square.color}_${square.type}.png`
                     pieceElement.className = 'board-piece'
                     pieceElement.onmousedown = (e) => {
@@ -507,6 +529,7 @@ class Chess5 {
         document.body.append(boardElement)
     }
 
+    //drag piece handler
     onDrag (onDragEvent) {
         const target = onDragEvent.target
         target.style.position = 'absolute';
@@ -526,18 +549,17 @@ class Chess5 {
         document.addEventListener('mousemove', onMouseMove);
 
         target.onmouseup = ({pageX: muPX, pageY: muPY}) => {
-            target.style.position = 'static'
             target.style.zIndex = 1;
             const newParents = document.elementsFromPoint(muPX, muPY)
             let found
-            for (const parent of newParents) {
-                const id = parent.id
+            for (const {id} of newParents) {
                 if (!id || id === 'board') continue
                 this.movePiece(initialParent.id, id, target)
                 found = true
                 break;
             }
             if (!found) {
+                target.style.position = 'static'
                 initialParent.append(target)
             }
             document.removeEventListener('mousemove', onMouseMove);
@@ -546,7 +568,52 @@ class Chess5 {
         }
     }
 
+    handlePromotion (oldCoordinates, newCoordinates, piece, pieceDOMRef) {
+        const promotionContainer = document.createElement('div')
+        promotionContainer.className = 'promotion-container'
+
+        const handleClickOff = (clickEvent) => {
+            if (!document.elementsFromPoint(clickEvent.pageX, clickEvent.pageY).includes(promotionContainer)) {
+                promotionContainer.remove()
+                pieceDOMRef.style.position = 'static'
+                document.getElementById(oldCoordinates).append(pieceDOMRef)
+                document.removeEventListener('click', handleClickOff)
+            }
+        }
+
+        document.addEventListener('click', handleClickOff)
+
+        promotionPieceTypes.forEach(pieceType => {
+            const promotionPiece = document.createElement('img')
+            promotionPiece.src = `pieces/${piece.color}_${pieceType}.png`
+            promotionPiece.className = 'promotion-piece'
+            promotionPiece.onclick = () => {
+                const {x: newX, y: newY} = parseCoordinates(newCoordinates)
+                const {x: oldX, y: oldY} = parseCoordinates(oldCoordinates)
+                piece.promote(pieceType)
+                pieceDOMRef.src = `./pieces/${piece.color}_${pieceType}.png`
+                pieceDOMRef.style.position = 'static'
+                document.getElementById(newCoordinates).replaceChildren(pieceDOMRef)
+                piece.x = newX
+                piece.y = newY
+                this.board[newX][newY] = piece
+                this.board[oldX][oldY] = null
+                this.updatePieces(oldCoordinates, newCoordinates)
+                removeHighlights();
+                promotionContainer.remove()
+                document.removeEventListener('click', handleClickOff)
+                this.passTurn();
+            }
+            promotionContainer.append(promotionPiece)
+        })
+    
+        //need to append in specific location
+        document.body.append(promotionContainer)
+    }
+
 }
+
+const isIterativePiece = (type) => type === 'queen' || type === 'rook' || type === 'bishop'
 
 class Piece {
     constructor (color, type, x, y) {
@@ -556,12 +623,22 @@ class Piece {
         this.y = y;
         this.availableSquares = new Set();
         this.blockedSquares = new Set();
-        if (type === 'bishop' || type === 'rook' || type === 'queen') {
+        if (isIterativePiece(type)) {
             this.xraySquares = new Set()
         }
-        if (type === 'pawn') {
+        if (type === 'pawn') { 
             this.pawnMoves = new Set()
-            //en passant
+            this.promote = (type) => {
+                this.type = type
+                if (isIterativePiece(type)) {
+                    this.xraySquares = new Set()
+                }
+                delete this.pawnMoves
+                delete this.pawnBlockedSquare
+                delete this.enPassantMove
+                delete this.enPassantPieceRef
+                delete this.promote
+            }
         }
         this.updateNextCycle = false
     }

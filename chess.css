@@ -28,3 +28,23 @@
 .circle-red-backing {
     background: radial-gradient(ellipse at center, lightgray 0%, lightgray 63%, red 65%, transparent 66%);
 }
+
+.promotion-container {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    background-color: lightgray;
+    width: fit-content;
+}
+
+.promotion-piece {
+    width: 3vw;
+    padding: 2px;
+    border: 1px solid gray;
+    margin-top: -1px;
+    cursor: pointer;
+}
+
+.promotion-piece:hover {
+    background-color: rgb(151, 150, 150);
+}

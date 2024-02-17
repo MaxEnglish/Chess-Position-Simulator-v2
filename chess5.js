@@ -114,6 +114,11 @@ class Chess5 {
 
         this.adjustPinnedPieceMoves();
         this.adjustKingSquares()
+        
+        if (this.updateNextCyclePiece) {
+            this.updateNextCyclePiece.updateNextCycle = true
+        }
+
         if (this.inCheck) {
             this.adjustForCheck()
         }
@@ -182,7 +187,7 @@ class Chess5 {
 
             this.passTurn()
             //this.notTurn = this.notTurn === 'white' ? 'black' : 'white' 
-
+            console.log(this.blackPieceRefs)
         } else {
             pieceDOMRef.style.position = 'static'
             document.getElementById(oldCoordinates).append(pieceDOMRef)
@@ -269,8 +274,9 @@ class Chess5 {
     //check if piece needs to be updated and calls proper method
     updateMoves (pieceRefArr, oldCoords, newCoords, isSetup) {
         pieceRefArr.forEach(piece => {
+            //console.log(piece, piece.setHasCoords(oldCoords, newCoords))
             if (isSetup || piece.setHasCoords(oldCoords, newCoords)) {
-                console.log(piece)
+                
                 piece.clearSets()
                 switch(piece.type) {
                     case 'bishop':
@@ -306,6 +312,7 @@ class Chess5 {
         this.checkingPieces = []
         this.enPassantMoves.clear()
         this.inCheck = false
+        this.updateNextCyclePiece = undefined
     }
 
     //update bishop/rook/queen moves
@@ -334,7 +341,9 @@ class Chess5 {
                     if (nextSquare.type === 'king' && pieceToCauseXray.color === oppositeColor) {
                         this.pinnedPieces.push([pieceToCauseXray, trackMoves.concat(stringifyCoordinates(piece.x, piece.y))])
                         piece.updateNextCycle = true
-                        pieceToCauseXray.updateNextCycle = true
+                        //pieceToCauseXray.updateNextCycle = true
+                        this.updateNextCyclePiece = pieceToCauseXray
+                        console.log('XRAY CAUSER: ', pieceToCauseXray)
                     } 
                     piece.xraySquares.add(stringifiedCoordinates)
                 } else {

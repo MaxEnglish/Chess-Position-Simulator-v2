@@ -114,7 +114,7 @@ class Chess5 {
 
         this.adjustPinnedPieceMoves();
         this.adjustKingSquares()
-        
+
         if (this.updateNextCyclePiece) {
             this.updateNextCyclePiece.updateNextCycle = true
         }
@@ -149,7 +149,7 @@ class Chess5 {
 
         if (piece.color === this.turn && (piece.availableSquares.has(newCoordinates) || piece.pawnMoves?.has(newCoordinates))) {
             //check if promoting piece
-            if (piece.type === 'pawn' && (newX === 0 || newX === this.rows)) {
+            if (piece.type === 'pawn' && (newX === 0 || newX === this.rows - 1)) {
                 this.handlePromotion(oldCoordinates, newCoordinates, piece, pieceDOMRef)
                 return;
             }
@@ -186,8 +186,6 @@ class Chess5 {
             this.updatePieces(oldCoordinates, newCoordinates)
 
             this.passTurn()
-            //this.notTurn = this.notTurn === 'white' ? 'black' : 'white' 
-            console.log(this.blackPieceRefs)
         } else {
             pieceDOMRef.style.position = 'static'
             document.getElementById(oldCoordinates).append(pieceDOMRef)
@@ -274,7 +272,6 @@ class Chess5 {
     //check if piece needs to be updated and calls proper method
     updateMoves (pieceRefArr, oldCoords, newCoords, isSetup) {
         pieceRefArr.forEach(piece => {
-            //console.log(piece, piece.setHasCoords(oldCoords, newCoords))
             if (isSetup || piece.setHasCoords(oldCoords, newCoords)) {
                 
                 piece.clearSets()
@@ -341,9 +338,7 @@ class Chess5 {
                     if (nextSquare.type === 'king' && pieceToCauseXray.color === oppositeColor) {
                         this.pinnedPieces.push([pieceToCauseXray, trackMoves.concat(stringifyCoordinates(piece.x, piece.y))])
                         piece.updateNextCycle = true
-                        //pieceToCauseXray.updateNextCycle = true
                         this.updateNextCyclePiece = pieceToCauseXray
-                        console.log('XRAY CAUSER: ', pieceToCauseXray)
                     } 
                     piece.xraySquares.add(stringifiedCoordinates)
                 } else {
@@ -579,6 +574,9 @@ class Chess5 {
 
     handlePromotion (oldCoordinates, newCoordinates, piece, pieceDOMRef) {
         const promotionContainer = document.createElement('div')
+        const {right, top} = pieceDOMRef.getBoundingClientRect()
+        promotionContainer.style.right = right + 100 + 'px'
+        promotionContainer.style.top = top + 'px'
         promotionContainer.className = 'promotion-container'
 
         const handleClickOff = (clickEvent) => {

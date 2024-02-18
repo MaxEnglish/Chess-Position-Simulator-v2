@@ -1,6 +1,8 @@
 const addOp = initialVal => initialVal + 1
 const minusOp = initialVal => initialVal - 1
 const staySame = initialVal => initialVal
+const incByY = (y, inc) => y + inc
+const decByY = (y, inc) => y - inc
 const stringifyCoordinates = (x, y) => `${x}${y}`
 const parseCoordinates = coordinateString => ({
     x: parseInt(coordinateString[0]),
@@ -112,9 +114,9 @@ class Chess5 {
         this.updateKingMoves(this.whiteKingRef)
         this.updateMoves(this.blackPieceRefs, oldCoordinates, newCoordinates, setup)
 
-        this.adjustPinnedPieceMoves();
+        this.adjustPinnedPieceMoves()
         this.adjustKingSquares()
-
+        this.adjustCastleMoves()
         if (this.updateNextCyclePiece) {
             this.updateNextCyclePiece.updateNextCycle = true
         }
@@ -157,11 +159,16 @@ class Chess5 {
             //put piece into DOM
             pieceDOMRef.style.position = 'static'
             document.getElementById(newCoordinates).replaceChildren(pieceDOMRef)
+
             //remove any highlights
             removeHighlights()
             //if en passant move played, remove piece from DOM, ref array, and board member
             if (piece.enPassantMove === newCoordinates) {
                 this.adjustEnPassant(piece)
+            }
+
+            if (piece.type === 'king' || piece.type === 'rook') {
+                piece.hasMoved = true
             }
             
             piece.x = newX
@@ -250,6 +257,10 @@ class Chess5 {
         thisTurnKing.availableSquares.forEach(square => oppositeKing.availableSquares.delete(square))
     }
 
+    adjustCastleMoves () {
+
+    }
+
     //remove all unviable moves from pieces when player is in check
     adjustForCheck () {
         let numAvailableMoves = 0
@@ -312,9 +323,36 @@ class Chess5 {
         this.updateNextCyclePiece = undefined
     }
 
+    checkIfAttackingCastleSquare (x, y, kingRef, op) {
+        return x === kingRef.x && (/*y === kingRef.y ||*/ y === op(kingRef.y, 1) || y === op(kingRef.y, 2))
+    }
+
+    getOppositeColorMembers (color) {
+        const colorIsWhite = color === 'white'
+        const oppositeCanCastleKingside = colorIsWhite ? this.blackCanCastleKingside : this.whiteCanCastleKingside
+        const oppositeCanCastleQueenside = colorIsWhite ? this.blackCanCastleQueenside : this.whiteCanCastleQueenside
+        return {
+                oppositeColor: colorIsWhite ? 'black' : 'white',
+                oppositeKing: colorIsWhite ? this.blackKingRef : this.whiteKingRef,
+                oppositePieces: colorIsWhite ? this.blackPieceRefs : this.whitePieceRefs,
+                oppositeCanCastleKingside: oppositeCanCastleKingside,
+                oppositeCanCastleQueenside: oppositeCanCastleQueenside,
+                updateOppositeCanCastleKingside: (v) => oppositeCanCastleKingside = v,
+                updateOppositeCanCastleQueenside: (v) => oppositeCanCastleQueenside = v
+            }
+    }
+
     //update bishop/rook/queen moves
     updateIterativeMoves (piece) {
-        const oppositeColor = piece.color === 'white' ? 'black' : 'white'
+        const {
+            oppositeColor, 
+            oppositeKing, 
+            oppositeCanCastleKingside, 
+            oppositeCanCastleQueenside,
+            updateOppositeCanCastleKingside,
+            updateOppositeCanCastleQueenside
+        } = this.getOppositeColorMembers(piece.color)
+
         let pieceToCauseXray, trackMoves = []
         const resetTrackingFields = () => {
             pieceToCauseXray = undefined
@@ -329,6 +367,12 @@ class Chess5 {
                 if (xray) {
                     piece.xraySquares.add(stringifiedCoordinates)
                 } else {
+                    if (oppositeCanCastleKingside) {
+                        updateOppositeCanCastleKingside(this.checkIfAttackingCastleSquare(newX, newY, oppositeKing, incByY))
+                    }
+                    if (oppositeCanCastleQueenside) {
+                        updateOppositeCanCastleQueenside(this.checkIfAttackingCastleSquare(newX, newY, oppositeKing, decByY))
+                    }
                     piece.availableSquares.add(stringifiedCoordinates)
                 }
                 trackMoves.push(stringifiedCoordinates)
@@ -383,7 +427,14 @@ class Chess5 {
 
     //update knight moves
     updateKnightMoves (piece) {
-        const oppositeColor = piece.color === 'white' ? 'black' : 'white'
+        const {
+            oppositeColor,
+            oppositeCanCastleKingside,
+            oppositeCanCastleQueenside,
+            oppositeKing,
+            updateOppositeCanCastleKingside,
+            updateOppositeCanCastleQueenside
+        } = this.getOppositeColorMembers(piece.color)
 
         const up2 = piece.x - 2, 
         down2 = piece.x + 2, 
@@ -398,6 +449,12 @@ class Chess5 {
           const boardSquare = this.board[x] ? this.board[x][y] : undefined;
           const stringifiedCoordinates = stringifyCoordinates(x,y)
           if (boardSquare === null) {
+            if (oppositeCanCastleKingside) {
+                updateOppositeCanCastleKingside(this.checkIfAttackingCastleSquare(x, y, oppositeKing, incByY))
+            }
+            if (oppositeCanCastleQueenside) {
+                updateOppositeCanCastleQueenside(this.checkIfAttackingCastleSquare(x, y, oppositeKing, decByY))
+            }
             piece.availableSquares.add(stringifiedCoordinates)
           } else if (boardSquare?.color === oppositeColor) {
             if (boardSquare.type === 'king') {
@@ -421,7 +478,15 @@ class Chess5 {
     //update pawn moves
     updatePawnMoves (piece) {
         const directionIsUp = piece.color === this.facingColor
-        const oppositeColor = piece.color === 'white' ? 'black' : 'white'
+        const {
+            oppositeColor,
+            oppositeCanCastleKingside,
+            oppositeCanCastleQueenside,
+            oppositeKing,
+            updateOppositeCanCastleKingside,
+            updateOppositeCanCastleQueenside
+        } = this.getOppositeColorMembers(piece.color)
+
         const affect = val => directionIsUp ? piece.x - val : piece.x + val 
         const oneForward = affect(1)
         const moveTwoRowNum = directionIsUp ? 6 : 1
@@ -440,16 +505,22 @@ class Chess5 {
         }
 
         const checkCaptureSquares = (yCoord) => {
-            if (this.board[oneForward][yCoord] !== undefined) {
+            //if (this.board[oneForward][yCoord] !== undefined) {
                 if (this.board[oneForward][yCoord]?.color === oppositeColor) {
                     if (this.board[oneForward][yCoord].type === 'king') {
                         this.putInCheck([stringifyCoordinates(piece.x, piece.y)])
                     }
                     piece.availableSquares.add(stringifyCoordinates(oneForward, yCoord))
                 } else {
+                    if (oppositeCanCastleKingside) {
+                        updateOppositeCanCastleKingside(this.checkIfAttackingCastleSquare(oneForward, yCoord, oppositeKing, incByY))
+                    }
+                    if (oppositeCanCastleQueenside) {
+                        updateOppositeCanCastleKingside(this.checkIfAttackingCastleSquare(oneForward, yCoord, oppositeKing, decByY))
+                    }
                     piece.blockedSquares.add(stringifyCoordinates(oneForward, yCoord))
                 }  
-            }    
+            //}    
         }
 
         checkCaptureSquares(piece.y + 1)
@@ -491,6 +562,18 @@ class Chess5 {
         findKingMoves(down, right)
         findKingMoves(piece.x, left)
         findKingMoves(piece.x, right)
+
+        if (!piece.hasMoved) {
+            (piece.color === 'white' ? this.whiteCanCastleKingside : this.blackCanCastleKingside) = this.findIfCanCastle(piece.x, piece.y, (v) => v + 1) //kings
+            (piece.color === 'white' ? this.whiteCanCastleQueenside : this.blackCanCastleQueenside) = this.findIfCanCastle(piece.x, piece.y, (v) => v - 1) //queens
+        }
+    }
+
+    findIfCanCastle (xCoord, yCoord, op) {
+        const nextSquare = this.board[xCoord][op(yCoord)]
+        return nextSquare === null ?
+            this.findIfCanCastle(xCoord, op(yCoord)) :
+            nextSquare?.type === 'rook' && !nextSquare.hasMoved
     }
 
 
@@ -574,8 +657,8 @@ class Chess5 {
 
     handlePromotion (oldCoordinates, newCoordinates, piece, pieceDOMRef) {
         const promotionContainer = document.createElement('div')
-        const {right, top} = pieceDOMRef.getBoundingClientRect()
-        promotionContainer.style.right = right + 100 + 'px'
+        const {right, top, width} = pieceDOMRef.getBoundingClientRect()
+        promotionContainer.style.right = right + width + 50 + 'px'
         promotionContainer.style.top = top + 'px'
         promotionContainer.className = 'promotion-container'
 
@@ -589,6 +672,7 @@ class Chess5 {
         }
 
         document.addEventListener('click', handleClickOff)
+        const fragment = document.createDocumentFragment();
 
         promotionPieceTypes.forEach(pieceType => {
             const promotionPiece = document.createElement('img')
@@ -611,13 +695,12 @@ class Chess5 {
                 document.removeEventListener('click', handleClickOff)
                 this.passTurn();
             }
-            promotionContainer.append(promotionPiece)
+            fragment.append(promotionPiece)
         })
     
-        //need to append in specific location
+        promotionContainer.append(fragment)
         document.body.append(promotionContainer)
     }
-
 }
 
 const isIterativePiece = (type) => type === 'queen' || type === 'rook' || type === 'bishop'
@@ -647,6 +730,9 @@ class Piece {
                 delete this.promote
             }
         }
+        if (type === 'king' || type === 'rook') {
+            this.hasMoved = false
+        }
         this.updateNextCycle = false
     }
 
@@ -675,5 +761,9 @@ class Piece {
         this.pawnMoves?.has(coord2) ||
         this.pawnBlockedSquare === coord1 ||
         this.pawnBlockedSquare === coord2
+    }
+
+    getCombinedCoords () {
+        return stringifiedCoordinates(this.x, this.y)
     }
 }
